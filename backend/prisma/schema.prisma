@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id               String            @id @default(uuid())
+  name             String
+  cnpj             String?           @unique
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  branches         Branch[]
+  costCenters      CostCenter[]
+  assetCategories  AssetCategory[]
+  assets           Asset[]
+  depreciationRuns DepreciationRun[]
+}
+
+model Branch {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  name      String
+  code      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  assets    Asset[]
+
+  @@index([companyId])
+}
+
+model CostCenter {
+  id         String       @id @default(uuid())
+  companyId  String
+  company    Company      @relation(fields: [companyId], references: [id])
+  code       String
+  name       String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  assets     Asset[]
+  fromEvents AssetEvent[] @relation("FromCostCenterEvents")
+  toEvents   AssetEvent[] @relation("ToCostCenterEvents")
+
+  @@index([companyId])
+}
+
+model AssetCategory {
+  id               String              @id @default(uuid())
+  companyId        String
+  company          Company             @relation(fields: [companyId], references: [id])
+  name             String
+  code             String
+  usefulLifeMonths Int
+  residualPercent  Decimal             @default(0)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  depreciationRules DepreciationRule[]
+  assets           Asset[]
+
+  @@index([companyId])
+}
+
+model DepreciationRule {
+  id               String        @id @default(uuid())
+  categoryId       String
+  category         AssetCategory @relation(fields: [categoryId], references: [id])
+  bookType         String        @default("CONTABIL")
+  method           String        @default("LINEAR")
+  usefulLifeMonths Int
+  residualPercent  Decimal       @default(0)
+  activeFrom       DateTime
+  activeTo         DateTime?
+  createdAt        DateTime      @default(now())
+
+  @@index([categoryId])
+}
+
+model Asset {
+  id                      String               @id @default(uuid())
+  companyId               String
+  branchId                String?
+  costCenterId            String?
+  assetCode               String               @unique
+  description             String
+  categoryId              String
+  acquisitionDate         DateTime
+  inServiceDate           DateTime
+  acquisitionValue        Decimal
+  residualValue           Decimal              @default(0)
+  depreciableBase         Decimal
+  usefulLifeMonths        Int
+  depreciationMethod      String               @default("LINEAR")
+  status                  String               @default("ACTIVE")
+  disposalDate            DateTime?
+  disposalValue           Decimal?
+  accumulatedDepreciation Decimal              @default(0)
+  netBookValue            Decimal
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  company                 Company              @relation(fields: [companyId], references: [id])
+  branch                  Branch?              @relation(fields: [branchId], references: [id])
+  costCenter              CostCenter?          @relation(fields: [costCenterId], references: [id])
+  category                AssetCategory        @relation(fields: [categoryId], references: [id])
+  events                  AssetEvent[]
+  depreciationEntries     DepreciationEntry[]
+
+  @@index([companyId])
+  @@index([categoryId])
+  @@index([branchId])
+  @@index([costCenterId])
+  @@index([status])
+}
+
+model AssetEvent {
+  id               String      @id @default(uuid())
+  assetId          String
+  eventType        String
+  eventDate        DateTime
+  amount           Decimal?
+  fromCostCenterId String?
+  toCostCenterId   String?
+  notes            String?
+  createdBy        String?
+  createdAt        DateTime    @default(now())
+  asset            Asset       @relation(fields: [assetId], references: [id])
+  fromCostCenter   CostCenter? @relation("FromCostCenterEvents", fields: [fromCostCenterId], references: [id])
+  toCostCenter     CostCenter? @relation("ToCostCenterEvents", fields: [toCostCenterId], references: [id])
+
+  @@index([assetId])
+}
+
+model DepreciationRun {
+  id        String              @id @default(uuid())
+  companyId String
+  period    String
+  bookType  String              @default("CONTABIL")
+  status    String              @default("DRAFT")
+  startedAt DateTime            @default(now())
+  closedAt  DateTime?
+  startedBy String?
+  closedBy  String?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  company   Company             @relation(fields: [companyId], references: [id])
+  entries   DepreciationEntry[]
+
+  @@index([companyId, period])
+}
+
+model DepreciationEntry {
+  id                String          @id @default(uuid())
+  runId             String
+  run               DepreciationRun @relation(fields: [runId], references: [id])
+  assetId           String
+  asset             Asset           @relation(fields: [assetId], references: [id])
+  period            String
+  openingGrossValue Decimal
+  openingAccumDepr  Decimal
+  deprAmount        Decimal
+  closingAccumDepr  Decimal
+  closingNetValue   Decimal
+  createdAt         DateTime        @default(now())
+
+  @@unique([assetId, period])
+  @@index([runId])
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  role         String     @default("USER")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String
+  oldValue  Json?
+  newValue  Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
